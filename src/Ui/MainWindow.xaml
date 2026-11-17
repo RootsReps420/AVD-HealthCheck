@@ -390,7 +390,7 @@
             <TextBlock Text="{Binding Target}" FontFamily="{StaticResource Mono}" FontSize="11.5" Foreground="{StaticResource Subtle}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
           </StackPanel>
 
-          <TextBlock x:Name="DetailText" Grid.Column="2" Text="{Binding Detail}" TextWrapping="Wrap" FontSize="12"
+          <TextBlock x:Name="DetailText" Grid.Column="2" Text="{Binding Display}" ToolTip="{Binding Detail}" TextWrapping="Wrap" FontSize="12"
                      Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,10,0"/>
 
           <TextBlock Grid.Column="3" Text="{Binding Latency}" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -422,6 +422,7 @@
         <DataTrigger Binding="{Binding State}" Value="Pass">
           <Setter TargetName="Ring" Property="Visibility" Value="Collapsed"/>
           <Setter TargetName="PassIcon" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="DetailText" Property="Foreground" Value="#9EE0C4"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="Warn">
           <Setter TargetName="Ring" Property="Visibility" Value="Collapsed"/>

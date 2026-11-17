@@ -47,7 +47,12 @@ namespace AvdHealthCheck
         public CheckState State
         {
             get { return _state; }
-            set { if (Set(ref _state, value) && Owner != null) Owner.Refresh(); }
+            set
+            {
+                if (!Set(ref _state, value)) return;
+                Raise("Display");
+                if (Owner != null) Owner.Refresh();
+            }
         }
 
         // False when "Show issues only" hides a passing check.
@@ -62,7 +67,26 @@ namespace AvdHealthCheck
         public string Detail
         {
             get { return _detail; }
-            set { Set(ref _detail, value); }
+            set { if (Set(ref _detail, value)) Raise("Display"); }
+        }
+
+        /// <summary>
+        /// What the row shows. Endpoints: just Pass / Warning / Fail (the response time is in its own
+        /// column; the technical detail is in the tooltip and the copied report). Agent checks: the detail.
+        /// </summary>
+        public string Display
+        {
+            get
+            {
+                if (!IsEndpoint) return _detail;
+                switch (_state)
+                {
+                    case CheckState.Pass: return "Pass";
+                    case CheckState.Warn: return "Warning";
+                    case CheckState.Fail: return "Fail";
+                    default: return _detail;   // "Waiting" / "Checking"
+                }
+            }
         }
 
         private string _latency;

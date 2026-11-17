@@ -258,7 +258,7 @@ namespace AvdHealthCheck
         {
             item.State = state;
             item.Detail = detail;
-            item.Latency = ms.HasValue ? ms.Value + " ms" : "";
+            item.Latency = ms.HasValue ? ms.Value + " ms" : "–";   // no response, no time
         }
 
         private static void Observe(Task task)

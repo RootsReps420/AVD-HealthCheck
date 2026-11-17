@@ -64,7 +64,7 @@ The card shows **Optimised**, **Fallback**, **Not optimised**, **Unconfirmed**, 
 | `tcp` | A direct TCP connect. This cannot go through a web proxy. | The port opened. |
 | `imds` | Azure Instance Metadata Service at `169.254.169.254`. Always direct. Not in the default list; the **This device** card still reads it quietly for the VM size, region, and VM ID. | The VM is in Azure and can read its own metadata. |
 
-Results are marked **pass**, **warning**, or **fail**:
+Each endpoint row shows just **Pass**, **Warning**, or **Fail** and its response time. Hover over the result for the technical detail (HTTP status, certificate issuer, direct or via proxy, reason for a failure); the copied report always includes it. A row is marked **Warning** when:
 
 - **TLS inspected:** the endpoint answered, but its certificate was not issued by a public certificate authority. Usually this means the proxy is decrypting the traffic. Microsoft does not support TLS inspection for AVD traffic, so this is shown as a warning.
 - **Slow response:** the endpoint took longer than 1.5 s (`slowResponseMs`).
