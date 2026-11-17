@@ -31,7 +31,9 @@ namespace AvdHealthCheck
     /// <summary>One endpoint row in the Connectivity list.</summary>
     public class CheckItem : Observable
     {
-        public EndpointDef Def { get; set; }
+        public EndpointDef Def { get; set; }        // null for local agent checks
+        public string Key { get; set; }             // e.g. "prisma.tunnel" for agent checks
+        public bool IsEndpoint { get { return Def != null; } }
         public string Group { get; set; }
         public string Name { get; set; }
         public string Target { get; set; }
@@ -115,14 +117,42 @@ namespace AvdHealthCheck
         public string ConnSub { get { return _connSub; } set { Set(ref _connSub, value); } }
 
         private string _downValue = "–";
-        public string DownValue { get { return _downValue; } set { Set(ref _downValue, value); } }
+        public string DownValue { get { return _downValue; } set { if (Set(ref _downValue, value)) Raise("SpeedSub"); } }
         private string _downSub = "Waiting";
-        public string DownSub { get { return _downSub; } set { Set(ref _downSub, value); } }
+        public string DownSub { get { return _downSub; } set { if (Set(ref _downSub, value)) Raise("SpeedSub"); } }
 
         private string _upValue = "–";
-        public string UpValue { get { return _upValue; } set { Set(ref _upValue, value); } }
+        public string UpValue { get { return _upValue; } set { if (Set(ref _upValue, value)) Raise("SpeedSub"); } }
         private string _upSub = "Waiting";
-        public string UpSub { get { return _upSub; } set { Set(ref _upSub, value); } }
+        public string UpSub { get { return _upSub; } set { if (Set(ref _upSub, value)) Raise("SpeedSub"); } }
+
+        /// <summary>One line under the combined Speed card: what is running, or what went wrong.</summary>
+        public string SpeedSub
+        {
+            get
+            {
+                if (_upSub != null && _upSub.StartsWith("Testing")) return "Upload " + _upSub.Substring(7).Trim();
+                if (_downSub != null && _downSub.StartsWith("Testing")) return "Download " + _downSub.Substring(7).Trim();
+                if (_downValue == "–" && _upValue != "–") return "Download: " + _downSub;
+                if (_upValue == "–" && _downValue != "–") return "Upload: " + _upSub;
+                return _downSub;
+            }
+        }
+
+        // Prisma Access and Teams cards: State drives the colour (Pending | Running | Pass | Warn | Fail)
+        private string _prismaValue = "–";
+        public string PrismaValue { get { return _prismaValue; } set { Set(ref _prismaValue, value); } }
+        private string _prismaSub = "Waiting";
+        public string PrismaSub { get { return _prismaSub; } set { Set(ref _prismaSub, value); } }
+        private CheckState _prismaState;
+        public CheckState PrismaState { get { return _prismaState; } set { Set(ref _prismaState, value); } }
+
+        private string _teamsValue = "–";
+        public string TeamsValue { get { return _teamsValue; } set { Set(ref _teamsValue, value); } }
+        private string _teamsSub = "Waiting";
+        public string TeamsSub { get { return _teamsSub; } set { Set(ref _teamsSub, value); } }
+        private CheckState _teamsState;
+        public CheckState TeamsState { get { return _teamsState; } set { Set(ref _teamsState, value); } }
 
         private string _latValue = "–";
         public string LatValue { get { return _latValue; } set { Set(ref _latValue, value); } }

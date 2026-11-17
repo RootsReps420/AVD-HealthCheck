@@ -18,7 +18,8 @@ namespace AvdHealthCheck
         {
             var sb = new StringBuilder();
             List<CheckItem> checks = vm.Checks.ToList();
-            int pass = checks.Count(c => c.State == CheckState.Pass);
+            List<CheckItem> endpoints = checks.Where(c => c.IsEndpoint).ToList();
+            int pass = endpoints.Count(c => c.State == CheckState.Pass);
             List<CheckItem> problems = checks.Where(c => c.State == CheckState.Fail || c.State == CheckState.Warn)
                                              .OrderBy(c => c.State == CheckState.Fail ? 0 : 1).ToList();
 
@@ -28,7 +29,11 @@ namespace AvdHealthCheck
             sb.AppendLine();
 
             sb.AppendLine("SUMMARY");
-            sb.AppendLine("Connectivity: " + pass + " of " + checks.Count + " passed" + Counts(checks));
+            if (checks.Any(c => c.Key != null && c.Key.StartsWith("prisma.")))
+                sb.AppendLine("Prisma Access: " + vm.PrismaValue + " · " + vm.PrismaSub);
+            if (checks.Any(c => c.Key != null && c.Key.StartsWith("teams.")))
+                sb.AppendLine("Teams optimisation: " + vm.TeamsValue + " · " + vm.TeamsSub);
+            sb.AppendLine("Connectivity: " + pass + " of " + endpoints.Count + " endpoints passed" + Counts(endpoints));
             sb.AppendLine("Speed test: " + SpeedLine(speed));
             sb.AppendLine();
 
@@ -43,7 +48,7 @@ namespace AvdHealthCheck
             foreach (DeviceField f in vm.Device) sb.AppendLine(f.Label + ": " + f.Value);
             sb.AppendLine();
 
-            sb.AppendLine("CONNECTIVITY");
+            sb.AppendLine("ALL CHECKS");
             foreach (IGrouping<string, CheckItem> group in checks.GroupBy(c => c.Group))
             {
                 sb.AppendLine(group.Key);
@@ -58,15 +63,17 @@ namespace AvdHealthCheck
         {
             if (speed == null) return "not run";
             if (speed.Error != null) return speed.Error;
+
             var parts = new List<string>
             {
-                "Download " + (speed.DownloadMbps.HasValue ? Mbps(speed.DownloadMbps) : "failed: " + speed.DownloadError),
-                "Upload " + (speed.UploadMbps.HasValue ? Mbps(speed.UploadMbps) : "failed: " + speed.UploadError),
-                "Latency " + (speed.LatencyMs.HasValue ? Math.Round(speed.LatencyMs.Value) + " ms" : "n/a")
+                "Download " + (speed.DownloadMbps.HasValue ? Mbps(speed.DownloadMbps) + " (" + speed.DownloadSource + ")" : "failed: " + speed.DownloadError),
+                "Upload " + (speed.UploadMbps.HasValue ? Mbps(speed.UploadMbps) + " (" + speed.UploadSource + ")" : "failed: " + speed.UploadError),
+                "Latency " + (speed.LatencyMs.HasValue ? Math.Round(speed.LatencyMs.Value) + " ms" +
+                    (speed.JitterMs.HasValue ? ", jitter " + Math.Round(speed.JitterMs.Value) + " ms" : "") + " (" + speed.LatencySource + ")" : "n/a")
             };
-            if (speed.JitterMs.HasValue) parts.Add("Jitter " + Math.Round(speed.JitterMs.Value) + " ms");
-            string where = (speed.Provider ?? "speed test") + (speed.Server != null ? " " + speed.Server : "") + ", " + speed.Route;
-            return string.Join(" | ", parts) + " (" + where + ")";
+            string line = string.Join(" | ", parts) + " · " + speed.Route;
+            if (speed.Notes.Count > 0) line += Environment.NewLine + "  Fallback used: " + string.Join("; ", speed.Notes);
+            return line;
         }
 
         public static string Mbps(double? value)

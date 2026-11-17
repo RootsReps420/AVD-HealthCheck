@@ -54,19 +54,45 @@
     }
   ],
 
-  "_speedTestReadme": "Cloudflare rate-limits by data volume per public IP, and behind the proxy every VM shares that IP, so each run is capped. To use an approved internal target instead, point downloadUrl at any large file (GET) and uploadUrl at anything that accepts a POST; leave uploadUrl empty to skip upload.",
+  "_prismaReadme": "Prisma Access Agent: the service is found by its executable (serviceExe); the tunnel is a network adapter whose name or description contains one of adapterMatch, is up, and has an IPv4 address.",
+  "prisma": {
+    "enabled": true,
+    "serviceExe": "PASrv.exe",
+    "adapterMatch": [ "PA Virtual Ethernet Adapter", "Prisma", "PANGP" ]
+  },
+
+  "_teamsReadme": "Teams media optimisation: IsWVDEnvironment registry flag, new Teams running in this session, WebRTC Redirector fallback, and the VDI mode Teams writes to its own logs (slimcore = optimised).",
+  "teams": {
+    "enabled": true
+  },
+
+  "_speedTestReadme": "Providers are tried in order; a later one only runs the parts (latency, download, upload) an earlier one could not do. Cloudflare rate-limits by data volume per public IP, and behind the proxy every VM shares that IP, so LibreSpeed (open-source, public servers) is the automatic fallback. A bank-hosted LibreSpeed server can be added as another librespeed provider with fallbackServers, or any fixed URLs as a fixed provider.",
   "speedTest": {
     "enabled": true,
-    "provider": "Cloudflare",
-    "latencyUrl": "https://speed.cloudflare.com/__down?bytes=0",
-    "downloadUrl": "https://speed.cloudflare.com/__down?bytes=25000000",
-    "uploadUrl": "https://speed.cloudflare.com/__up",
-    "uploadChunkBytes": 2000000,
-    "seconds": 6,
-    "streams": 4,
-    "maxDownloadMB": 150,
-    "maxUploadMB": 40
+    "seconds": 10,
+    "streams": 8,
+    "maxDownloadMB": 1500,
+    "maxUploadMB": 400,
+    "providers": [
+      {
+        "type": "fixed",
+        "name": "Cloudflare",
+        "latencyUrl": "https://speed.cloudflare.com/__down?bytes=0",
+        "downloadUrl": "https://speed.cloudflare.com/__down?bytes=25000000",
+        "uploadUrl": "https://speed.cloudflare.com/__up",
+        "uploadChunkBytes": 2000000
+      },
+      {
+        "type": "librespeed",
+        "name": "LibreSpeed",
+        "serverList": "https://librespeed.org/backend-servers/servers.php",
+        "preferServers": [ "London", "Amsterdam", "Frankfurt" ],
+        "fallbackServers": [ "https://lon.speedtest.clouvider.net/backend" ],
+        "uploadChunkBytes": 2000000
+      }
+    ]
   },
+
 
   "_publicIssuersReadme": "Certificate issuer organisations treated as public CAs. Anything else on an HTTPS check is reported as TLS inspection (for example, a proxy re-signing traffic).",
   "publicIssuers": [

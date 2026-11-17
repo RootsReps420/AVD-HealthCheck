@@ -15,6 +15,23 @@ namespace AvdHealthCheck
         public SpeedTestConfig SpeedTest { get; set; }
         public List<string> PublicIssuers { get; set; }
         public int? SlowResponseMs { get; set; }
+        public PrismaConfig Prisma { get; set; }
+        public TeamsConfig Teams { get; set; }
+    }
+
+    public class PrismaConfig
+    {
+        // "PA Virtual Ethernet Adapter Secure" is the adapter the bank's Prisma Access Agent creates.
+        public static readonly List<string> DefaultAdapterMatch = new List<string> { "PA Virtual Ethernet Adapter", "Prisma", "PANGP" };
+
+        public bool? Enabled { get; set; }
+        public string ServiceExe { get; set; }
+        public List<string> AdapterMatch { get; set; }
+    }
+
+    public class TeamsConfig
+    {
+        public bool? Enabled { get; set; }
     }
 
     public class EndpointGroup
@@ -58,6 +75,36 @@ namespace AvdHealthCheck
         public int? Streams { get; set; }
         public int? MaxDownloadMB { get; set; }
         public int? MaxUploadMB { get; set; }
+        public List<SpeedProviderConfig> Providers { get; set; }
+
+        /// <summary>Providers in the order to try. Older single-provider files (flat URLs) still work.</summary>
+        public List<SpeedProviderConfig> EffectiveProviders()
+        {
+            if (Providers != null && Providers.Count > 0) return Providers;
+            var single = new List<SpeedProviderConfig>();
+            if (!string.IsNullOrWhiteSpace(DownloadUrl))
+                single.Add(new SpeedProviderConfig
+                {
+                    Name = Provider, LatencyUrl = LatencyUrl, DownloadUrl = DownloadUrl,
+                    UploadUrl = UploadUrl, UploadChunkBytes = UploadChunkBytes
+                });
+            return single;
+        }
+    }
+
+    public class SpeedProviderConfig
+    {
+        public string Type { get; set; }               // "fixed" (default) | "librespeed"
+        public string Name { get; set; }
+        public string LatencyUrl { get; set; }
+        public string DownloadUrl { get; set; }
+        public string UploadUrl { get; set; }
+        public int? UploadChunkBytes { get; set; }
+        public string ServerList { get; set; }          // librespeed: JSON list of servers
+        public List<string> PreferServers { get; set; } // librespeed: name fragments, in order of preference
+        public List<string> FallbackServers { get; set; } // librespeed: base URLs if the list cannot be fetched
+
+        public string Kind { get { return (Type ?? "fixed").Trim().ToLowerInvariant(); } }
     }
 
     public static class ConfigLoader
@@ -95,6 +142,8 @@ namespace AvdHealthCheck
                 throw new InvalidDataException("no endpoint groups found");
             if (config.PublicIssuers == null) config.PublicIssuers = new List<string>();
             if (config.SpeedTest == null) config.SpeedTest = new SpeedTestConfig { Enabled = false };
+            if (config.Prisma == null) config.Prisma = new PrismaConfig();
+            if (config.Teams == null) config.Teams = new TeamsConfig();
             return config;
         }
     }

@@ -2,6 +2,7 @@
 // Order: device facts and endpoint checks in parallel, then the speed test on its own
 // (so a saturated link does not distort the endpoint latencies).
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -67,6 +68,22 @@ namespace AvdHealthCheck
         {
             _config = ConfigLoader.Load(out _configSource);
 
+            // Local agent checks first: these are the usual suspects in an AVD incident.
+            if (_config.Prisma.Enabled ?? true)
+            {
+                string exe = string.IsNullOrWhiteSpace(_config.Prisma.ServiceExe) ? "PASrv.exe" : _config.Prisma.ServiceExe;
+                List<string> adapters = _config.Prisma.AdapterMatch ?? PrismaConfig.DefaultAdapterMatch;
+                AddAgent("prisma.service", PrismaGroup, "Prisma Access Agent", exe + " · service");
+                AddAgent("prisma.tunnel", PrismaGroup, "Prisma tunnel", adapters.FirstOrDefault() ?? "tunnel adapter");
+            }
+            if (_config.Teams.Enabled ?? true)
+            {
+                AddAgent("teams.media", TeamsGroup, "Media optimisation", "VDI mode reported by Teams");
+                AddAgent("teams.client", TeamsGroup, "New Teams", "ms-teams.exe · this session");
+                AddAgent("teams.registry", TeamsGroup, "VDI registry flag", "IsWVDEnvironment");
+                AddAgent("teams.webrtc", TeamsGroup, "WebRTC Redirector (fallback)", "MsRdcWebRTCSvc.exe · service");
+            }
+
             foreach (EndpointGroup group in _config.Groups)
             {
                 foreach (EndpointDef def in group.Endpoints ?? Enumerable.Empty<EndpointDef>())
@@ -92,6 +109,93 @@ namespace AvdHealthCheck
             foreach (string label in SystemInfoCollector.Labels) _vm.Device.Add(new DeviceField(label));
         }
 
+        private const string PrismaGroup = "Prisma Access";
+        private const string TeamsGroup = "Teams optimisation";
+
+        private void AddAgent(string key, string group, string name, string target)
+        {
+            var item = new CheckItem { Key = key, Group = group, Name = name, Target = target, Required = true };
+            item.Reset();
+            _vm.Checks.Add(item);
+        }
+
+        private CheckItem Agent(string key)
+        {
+            return _vm.Checks.FirstOrDefault(c => c.Key == key);
+        }
+
+        private static void Apply(CheckItem item, AgentResult result)
+        {
+            if (item == null || result == null) return;
+            item.State = result.State;
+            item.Detail = result.Detail;
+            item.Latency = "";
+        }
+
+        private void SetAgentsRunning(string prefix)
+        {
+            foreach (CheckItem item in _vm.Checks.Where(c => c.Key != null && c.Key.StartsWith(prefix)))
+            {
+                item.State = CheckState.Running;
+                item.Detail = "Checking";
+            }
+        }
+
+        private async Task RunPrismaAsync()
+        {
+            if (Agent("prisma.service") == null) return;
+            SetAgentsRunning("prisma.");
+            _vm.PrismaState = CheckState.Running;
+            _vm.PrismaValue = "…";
+            _vm.PrismaSub = "Checking agent and tunnel";
+            PrismaReport report;
+            try
+            {
+                report = await Task.Run(() => AgentChecker.CheckPrisma(_config.Prisma));
+            }
+            catch (Exception ex)
+            {
+                report = new PrismaReport
+                {
+                    Service = new AgentResult(CheckState.Fail, "Could not check: " + ex.Message),
+                    Tunnel = new AgentResult(CheckState.Fail, "Could not check"),
+                    CardState = CheckState.Fail, CardValue = "Error", CardSub = ex.Message
+                };
+            }
+            Apply(Agent("prisma.service"), report.Service);
+            Apply(Agent("prisma.tunnel"), report.Tunnel);
+            _vm.PrismaState = report.CardState;
+            _vm.PrismaValue = report.CardValue;
+            _vm.PrismaSub = report.CardSub;
+        }
+
+        private async Task RunTeamsAsync()
+        {
+            if (Agent("teams.media") == null) return;
+            SetAgentsRunning("teams.");
+            _vm.TeamsState = CheckState.Running;
+            _vm.TeamsValue = "…";
+            _vm.TeamsSub = "Checking Teams";
+            TeamsReport report;
+            try
+            {
+                report = await Task.Run(() => AgentChecker.CheckTeams());
+            }
+            catch (Exception ex)
+            {
+                var failed = new AgentResult(CheckState.Fail, "Could not check: " + ex.Message);
+                report = new TeamsReport { Media = failed, Client = failed, Registry = failed, WebRtc = failed,
+                                           CardState = CheckState.Fail, CardValue = "Error", CardSub = ex.Message };
+            }
+            Apply(Agent("teams.media"), report.Media);
+            Apply(Agent("teams.client"), report.Client);
+            Apply(Agent("teams.registry"), report.Registry);
+            Apply(Agent("teams.webrtc"), report.WebRtc);
+            _vm.TeamsState = report.CardState;
+            _vm.TeamsValue = report.CardValue;
+            _vm.TeamsSub = report.CardSub;
+        }
+
         // ---------------------------------------------------------------- run
 
         private async Task RunAllAsync()
@@ -105,15 +209,18 @@ namespace AvdHealthCheck
             ResetView();
 
             bool speedEnabled = _config.SpeedTest.Enabled ?? true;
-            int totalUnits = _vm.Checks.Count + 1 + (speedEnabled ? 3 : 0);
+            int totalUnits = _vm.Checks.Count(c => c.IsEndpoint) + 3 + (speedEnabled ? 3 : 0);
             int doneUnits = 0;
-            Action step = () => { doneUnits++; _vm.Progress = 100.0 * doneUnits / totalUnits; };
+            Action step = () => { doneUnits++; _vm.Progress = Math.Min(99, 100.0 * doneUnits / totalUnits); };
 
-            Task device = CollectDeviceAsync().ContinueWith(t => step(), TaskScheduler.FromCurrentSynchronizationContext());
+            TaskScheduler ui = TaskScheduler.FromCurrentSynchronizationContext();
+            Task device = CollectDeviceAsync().ContinueWith(t => step(), ui);
+            Task prisma = RunPrismaAsync().ContinueWith(t => step(), ui);
+            Task teams = RunTeamsAsync().ContinueWith(t => step(), ui);
             using (var checker = new EndpointChecker(_config.PublicIssuers, _config.SlowResponseMs ?? 1500))
             {
                 var gate = new SemaphoreSlim(Parallelism);
-                Task[] checks = _vm.Checks.Select(async item =>
+                Task[] checks = _vm.Checks.Where(c => c.IsEndpoint).Select(async item =>
                 {
                     await gate.WaitAsync();
                     try { await checker.RunAsync(item); }
@@ -124,7 +231,7 @@ namespace AvdHealthCheck
 
                 await Task.WhenAll(checks);
             }
-            await device;
+            await Task.WhenAll(device, prisma, teams);
             UpdateConnectivitySummary(true);
 
             if (speedEnabled) await RunSpeedTestAsync(step);
@@ -157,8 +264,13 @@ namespace AvdHealthCheck
             _vm.Progress = 0;
             _vm.OverallState = "Running";
             _vm.OverallText = "Running checks";
-            _vm.ConnValue = "0/" + _vm.Checks.Count;
+            _vm.ConnValue = "0/" + _vm.Checks.Count(c => c.IsEndpoint);
             _vm.ConnSub = "Checking endpoints";
+            _vm.PrismaState = _vm.TeamsState = CheckState.Pending;
+            _vm.PrismaValue = _vm.TeamsValue = "–";
+            _vm.PrismaSub = _vm.TeamsSub = "Waiting";
+            if (Agent("prisma.service") == null) { _vm.PrismaValue = "Off"; _vm.PrismaSub = "Turned off in endpoints.json"; }
+            if (Agent("teams.media") == null) { _vm.TeamsValue = "Off"; _vm.TeamsSub = "Turned off in endpoints.json"; }
             _vm.DownValue = _vm.UpValue = _vm.LatValue = "–";
             _vm.DownSub = _vm.UpSub = _vm.LatSub = "Waiting for endpoint checks";
             _vm.Footer = "Running · endpoints from " + _configSource;
@@ -187,10 +299,11 @@ namespace AvdHealthCheck
 
         private void UpdateConnectivitySummary(bool final)
         {
-            int total = _vm.Checks.Count;
-            int pass = _vm.Checks.Count(c => c.State == CheckState.Pass);
-            int warn = _vm.Checks.Count(c => c.State == CheckState.Warn);
-            int fail = _vm.Checks.Count(c => c.State == CheckState.Fail);
+            List<CheckItem> endpoints = _vm.Checks.Where(c => c.IsEndpoint).ToList();
+            int total = endpoints.Count;
+            int pass = endpoints.Count(c => c.State == CheckState.Pass);
+            int warn = endpoints.Count(c => c.State == CheckState.Warn);
+            int fail = endpoints.Count(c => c.State == CheckState.Fail);
             int done = pass + warn + fail;
 
             _vm.ConnValue = pass + "/" + total;
@@ -199,8 +312,9 @@ namespace AvdHealthCheck
                 _vm.ConnSub = done + " of " + total + " checked";
                 return;
             }
-            _vm.HasIssues = fail + warn > 0;
-            _vm.IssuesLabel = "Show issues only (" + (fail + warn) + ")";
+            int allIssues = _vm.Checks.Count(c => c.State == CheckState.Fail || c.State == CheckState.Warn);
+            _vm.HasIssues = allIssues > 0;
+            _vm.IssuesLabel = "Show issues only (" + allIssues + ")";
             if (fail == 0 && warn == 0) _vm.ConnSub = "All endpoints reachable";
             else
             {
@@ -250,7 +364,6 @@ namespace AvdHealthCheck
             _speed = result;
             step();
 
-            string where = (result.Provider ?? "Speed test") + (result.Server != null ? " · " + result.Server : "");
             if (result.Error != null)
             {
                 _vm.DownValue = _vm.UpValue = _vm.LatValue = "–";
@@ -258,14 +371,18 @@ namespace AvdHealthCheck
                 return;
             }
 
+            // "(fallback)" when an earlier provider refused that part, e.g. Cloudflare rate-limited.
+            Func<string, string> label = source =>
+                source + (result.Notes.Count > 0 && !string.Equals(source, result.LatencySource) ? " · fallback" : "") + " · " + result.Route;
+
             _vm.LatValue = result.LatencyMs.HasValue ? Math.Round(result.LatencyMs.Value).ToString() : "–";
             _vm.LatSub = result.LatencyMs.HasValue
-                ? (result.JitterMs.HasValue ? "Jitter " + Math.Round(result.JitterMs.Value) + " ms · " : "") + where
+                ? (result.JitterMs.HasValue ? "Jitter " + Math.Round(result.JitterMs.Value) + " ms · " : "") + result.LatencySource
                 : "Not measured";
             _vm.DownValue = result.DownloadMbps.HasValue ? Number(result.DownloadMbps.Value) : "–";
-            _vm.DownSub = result.DownloadMbps.HasValue ? where + " · " + result.Route : (result.DownloadError ?? "No data received");
+            _vm.DownSub = result.DownloadMbps.HasValue ? label(result.DownloadSource) : (result.DownloadError ?? "No data received");
             _vm.UpValue = result.UploadMbps.HasValue ? Number(result.UploadMbps.Value) : "–";
-            _vm.UpSub = result.UploadMbps.HasValue ? where + " · " + result.Route : (result.UploadError ?? "Upload did not complete");
+            _vm.UpSub = result.UploadMbps.HasValue ? label(result.UploadSource) : (result.UploadError ?? "Upload did not complete");
         }
 
         private void SetOverall()
@@ -273,7 +390,7 @@ namespace AvdHealthCheck
             int fail = _vm.Checks.Count(c => c.State == CheckState.Fail);
             int warn = _vm.Checks.Count(c => c.State == CheckState.Warn);
             bool speedFailed = _speed != null && (_speed.DownloadMbps == null || _speed.UploadMbps == null);
-            int issues = fail + warn + (speedFailed ? 1 : 0);
+            int issues = fail + warn;   // same count as "Show issues only"; the speed card speaks for itself
 
             if (fail > 0)
             {
@@ -284,6 +401,11 @@ namespace AvdHealthCheck
             {
                 _vm.OverallState = "Warn";
                 _vm.OverallText = issues == 1 ? "1 warning" : issues + " warnings";
+            }
+            else if (speedFailed)
+            {
+                _vm.OverallState = "Warn";
+                _vm.OverallText = "Speed test incomplete";
             }
             else
             {

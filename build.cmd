@@ -1,8 +1,11 @@
 @echo off
 rem Builds dist\AVDHealthCheck.exe with the C# compiler that ships with Windows
 rem (.NET Framework 4.8). Nothing to install: double-click this file or run it from a prompt.
+rem Optional first argument: a different output path (handy while the app is open).
 setlocal
 cd /d "%~dp0"
+set OUT=dist\AVDHealthCheck.exe
+if not "%~1"=="" set OUT=%~1
 
 set FW=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319
 if not exist "%FW%\csc.exe" set FW=%WINDIR%\Microsoft.NET\Framework\v4.0.30319
@@ -14,7 +17,7 @@ if not exist "%FW%\csc.exe" (
 if not exist dist mkdir dist
 
 "%FW%\csc.exe" /nologo /target:winexe /platform:anycpu /optimize+ /debug- ^
-  /out:dist\AVDHealthCheck.exe ^
+  /out:"%OUT%" ^
   /win32icon:assets\app.ico ^
   /win32manifest:src\app.manifest ^
   /reference:"%FW%\WPF\PresentationFramework.dll" ^
@@ -41,4 +44,4 @@ if errorlevel 1 (
 )
 
 echo.
-echo Built dist\AVDHealthCheck.exe
+echo Built %OUT%
