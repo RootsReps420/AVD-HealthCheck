@@ -43,5 +43,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem A normal build replaces any temporary copy made while the app was open.
+if /i "%OUT%"=="dist\AVDHealthCheck.exe" if exist dist\AVDHealthCheck-next.exe del /q dist\AVDHealthCheck-next.exe
+
 echo.
 echo Built %OUT%
