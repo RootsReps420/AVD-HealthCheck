@@ -1,0 +1,89 @@
+{
+  "_readme": "Endpoints tested by AVD Health Check. Copy this file next to AVDHealthCheck.exe to override the built-in list without rebuilding. type: https | http | tcp | imds. required: false means a failure shows as a warning, not a fail.",
+
+  "groups": [
+    {
+      "name": "Identity",
+      "endpoints": [
+        { "name": "Microsoft Entra sign-in", "host": "login.microsoftonline.com", "type": "https" },
+        { "name": "Entra sign-in (legacy)", "host": "login.windows.net", "type": "https" },
+        { "name": "Microsoft Graph", "host": "graph.microsoft.com", "type": "https" }
+      ]
+    },
+    {
+      "name": "Azure Virtual Desktop service",
+      "endpoints": [
+        { "name": "Feed discovery (RD Web)", "host": "rdweb.wvd.microsoft.com", "type": "https" },
+        { "name": "Web client", "host": "client.wvd.microsoft.com", "type": "https" },
+        { "name": "Connection broker", "host": "rdbroker.wvd.microsoft.com", "type": "https" },
+        { "name": "RD Gateway", "host": "rdgateway.wvd.microsoft.com", "type": "https" },
+        { "name": "Agent monitoring", "host": "gcs.prod.monitoring.core.windows.net", "type": "https" },
+        { "name": "Agent and SxS stack updates", "host": "mrsglobalsteus2prod.blob.core.windows.net", "type": "https" },
+        { "name": "Portal support storage", "host": "wvdportalstorageblob.blob.core.windows.net", "type": "https" },
+        { "name": "Marketplace artifacts", "host": "catalogartifact.azureedge.net", "type": "https", "required": false }
+      ]
+    },
+    {
+      "name": "Azure platform",
+      "endpoints": [
+        { "name": "Instance Metadata Service", "host": "169.254.169.254", "port": 80, "type": "imds" },
+        { "name": "Host health (wire server)", "host": "168.63.129.16", "port": 80, "type": "tcp" },
+        { "name": "Windows activation (KMS)", "host": "azkms.core.windows.net", "port": 1688, "type": "tcp" },
+        { "name": "Certificate revocation (OCSP)", "host": "oneocsp.microsoft.com", "port": 80, "type": "http" },
+        { "name": "Network connectivity probe", "host": "www.msftconnecttest.com", "port": 80, "type": "http", "path": "/connecttest.txt", "required": false }
+      ]
+    },
+    {
+      "name": "Windows App",
+      "endpoints": [
+        { "name": "Windows App service", "host": "windows.cloud.microsoft", "type": "https" },
+        { "name": "Windows 365", "host": "windows365.microsoft.com", "type": "https", "required": false },
+        { "name": "Microsoft links (FWLink)", "host": "go.microsoft.com", "type": "https" },
+        { "name": "Short links", "host": "aka.ms", "type": "https", "required": false },
+        { "name": "Client updates (Office CDN)", "host": "res.cdn.office.net", "type": "https", "required": false },
+        { "name": "Client diagnostics", "host": "v10.events.data.microsoft.com", "type": "https", "required": false }
+      ]
+    },
+    {
+      "name": "Microsoft 365",
+      "endpoints": [
+        { "name": "Outlook / Exchange Online", "host": "outlook.office365.com", "type": "https", "required": false },
+        { "name": "Microsoft Teams", "host": "teams.microsoft.com", "type": "https", "required": false },
+        { "name": "Microsoft 365 portal", "host": "www.office.com", "type": "https", "required": false }
+      ]
+    }
+  ],
+
+  "_speedTestReadme": "Cloudflare rate-limits by data volume per public IP, and behind the proxy every VM shares that IP, so each run is capped. To use an approved internal target instead, point downloadUrl at any large file (GET) and uploadUrl at anything that accepts a POST; leave uploadUrl empty to skip upload.",
+  "speedTest": {
+    "enabled": true,
+    "provider": "Cloudflare",
+    "latencyUrl": "https://speed.cloudflare.com/__down?bytes=0",
+    "downloadUrl": "https://speed.cloudflare.com/__down?bytes=25000000",
+    "uploadUrl": "https://speed.cloudflare.com/__up",
+    "uploadChunkBytes": 2000000,
+    "seconds": 6,
+    "streams": 4,
+    "maxDownloadMB": 150,
+    "maxUploadMB": 40
+  },
+
+  "_publicIssuersReadme": "Certificate issuer organisations treated as public CAs. Anything else on an HTTPS check is reported as TLS inspection (for example, a proxy re-signing traffic).",
+  "publicIssuers": [
+    "Microsoft Corporation",
+    "DigiCert Inc",
+    "DigiCert, Inc.",
+    "GlobalSign nv-sa",
+    "Google Trust Services",
+    "Google Trust Services LLC",
+    "Let's Encrypt",
+    "Sectigo Limited",
+    "Entrust, Inc.",
+    "Amazon",
+    "Cloudflare, Inc.",
+    "SSL Corporation",
+    "GeoTrust Inc."
+  ],
+
+  "slowResponseMs": 1500
+}
