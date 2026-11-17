@@ -10,6 +10,23 @@ A single `.exe` for checking an Azure Virtual Desktop session host. Double-click
 
 ## What it checks
 
+### Client app
+
+The **Connection** group shows which app the user connected with:
+
+| Client | Result |
+| --- | --- |
+| **Windows App** | Green. This is the client users should be on. |
+| **Remote Desktop app** (the MSI or the old Store app) | Warning: an old, outdated client replaced by Windows App. |
+| **Web client** (browser) | Warning: degraded experience. Redirection is limited (no local drives or USB devices, PDF-only printing) and there is no Teams media optimisation. |
+| **Remote Desktop Connection** (`mstsc`) | Warning: not the supported way into AVD. |
+
+**How it is detected:** Windows does not record the client type on the VM. AVD only logs it centrally, in the Azure Monitor `WVDConnections` table. The app instead reads what the RDP client reports to the session: its **install path**, build number, and device name. Rules match on the install path (Windows App is the `MicrosoftCorporationII.Windows365` Store package), and the first match wins.
+
+The rules are in `clientApp.rules` in `endpoints.json`. The row always shows the raw values (device, build, client path). If a client is not recognised, or is labelled wrongly, connect once with that client, read the client path from the report, and add or adjust a rule. You do not need to rebuild.
+
+The **This device** card also shows **Connected from**: the user's device name and, when reported, its address.
+
 ### Prisma Access
 
 Shown as a green/red card plus two rows.
@@ -27,7 +44,7 @@ Shown as a green/red card plus four rows.
 
 | Row | What it checks |
 | --- | --- |
-| **Media optimisation** | The verdict. New Teams writes its VDI mode to its own logs (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs`). `VDI Mode: slimcore` means **Optimised**: media runs on the user's device. Any other mode shows as **Fallback**. `currentStack=local` shows as **Not optimised**: media is running inside the VM. Only logs written since Teams started are read. |
+| **Media optimisation** | The verdict. New Teams writes its VDI mode to its own logs (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs`), as a word (`slimcore`, `webrtc`) or an undocumented number. Numbers follow the observed pattern "second digit = media stack": `x2xx` is **SlimCore**, so `5200` on AVD (confirmed against Teams *Settings > About*) shows **Optimised**; `x1xx` is legacy **WebRTC** (`3100`), which shows **Fallback**. `currentStack`/`connectedStack = local` shows **Not optimised**: media is running inside the VM. Exact codes can be pinned in `teams.slimCoreModes` / `teams.webRtcModes` in `endpoints.json`. Only logs written since Teams started are read. |
 | **New Teams** | `ms-teams.exe` is running in *this user's* session (multi-session hosts run one copy per user), and its version. |
 | **VDI registry flag** | `HKLM\SOFTWARE\Microsoft\Teams\IsWVDEnvironment = 1`. Without it, Teams never optimises. |
 | **WebRTC Redirector (fallback)** | The Remote Desktop WebRTC Redirector service (`MsRdcWebRTCSvc.exe`) is installed and running. Microsoft recommends keeping it as the fallback when SlimCore is not available on the user's device. |

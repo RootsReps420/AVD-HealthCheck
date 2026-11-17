@@ -139,11 +139,12 @@ namespace AvdHealthCheck
         // ================================================================ Teams media optimisation
 
         private const string TeamsPackage = "MSTeams_8wekyb3d8bbwe";
-        private static readonly Regex VdiMode = new Regex(@"VDI Mode:\s*""?([A-Za-z0-9_\-]+)", RegexOptions.IgnoreCase);
-        private static readonly Regex Stack = new Regex(@"currentStack\s*[=:]\s*""?([A-Za-z]+)", RegexOptions.IgnoreCase);
+        // Matches "VDI Mode: 5200", "vdiMode":"slimcore", "currentStack=remote", "connectedStack":"remote".
+        private static readonly Regex VdiMode = new Regex(@"(?:VDI Mode|vdiMode)""?\s*[:=]\s*""?([A-Za-z0-9_\-]+)", RegexOptions.IgnoreCase);
+        private static readonly Regex Stack = new Regex(@"(?:currentStack|connectedStack)""?\s*[:=]\s*""?([A-Za-z]+)", RegexOptions.IgnoreCase);
         private static readonly Regex PackageVersion = new Regex(@"MSTeams_([\d.]+)_", RegexOptions.IgnoreCase);
 
-        public static TeamsReport CheckTeams()
+        public static TeamsReport CheckTeams(TeamsConfig config)
         {
             var report = new TeamsReport();
             bool remote = NativeMethods.GetSystemMetrics(NativeMethods.SM_REMOTESESSION) != 0;
@@ -222,28 +223,69 @@ namespace AvdHealthCheck
                     absent ? "New Teams not installed" : "Teams not running · open Teams and run again");
                 report.CardState = report.Media.State; report.CardValue = absent ? "No Teams" : "Teams closed"; report.CardSub = "Open Teams, then run again";
             }
-            else if (log == null || log.Mode == null)
-            {
-                report.Media = new AgentResult(CheckState.Warn, "Could not confirm from the Teams logs · in Teams, Settings > About should show \"AVD SlimCore Media Optimized\"");
-                report.CardState = CheckState.Warn; report.CardValue = "Unconfirmed"; report.CardSub = "Check Teams > Settings > About";
-            }
-            else if (string.Equals(log.Stack, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                report.Media = new AgentResult(CheckState.Fail, "Not optimised · Teams is processing media inside the VM (VDI Mode: " + log.Mode + ", stack local)");
-                report.CardState = CheckState.Fail; report.CardValue = "Not optimised"; report.CardSub = "Media running in the VM";
-            }
-            else if (string.Equals(log.Mode, "slimcore", StringComparison.OrdinalIgnoreCase))
-            {
-                report.Media = new AgentResult(CheckState.Pass, "Optimised · SlimCore, media offloaded to the user's device" +
-                                               (log.Stack != null ? " (stack " + log.Stack + ")" : "") + " · logged " + Format.Date(log.When));
-                report.CardState = CheckState.Pass; report.CardValue = "Optimised"; report.CardSub = "SlimCore" + Ver(teamsVersion, "Teams ");
-            }
             else
             {
-                report.Media = new AgentResult(CheckState.Warn, "Optimised in fallback mode, not SlimCore (VDI Mode: " + log.Mode + ") · check the Windows App / Teams plug-in on the user's device");
-                report.CardState = CheckState.Warn; report.CardValue = "Fallback"; report.CardSub = "VDI Mode " + log.Mode + " (not SlimCore)";
+                MediaStack stack = Classify(log, config);
+                string mode = log != null && log.Mode != null ? "VDI mode " + log.Mode : null;
+                string seen = log != null && log.Mode != null ? " · " + mode + (log.Stack != null ? ", stack " + log.Stack : "") + ", logged " + Format.Date(log.When) : "";
+                switch (stack)
+                {
+                    case MediaStack.SlimCore:
+                        report.Media = new AgentResult(CheckState.Pass, "Optimised · SlimCore, media offloaded to the user's device" + seen);
+                        report.CardState = CheckState.Pass; report.CardValue = "Optimised"; report.CardSub = "SlimCore" + (mode != null ? " · " + mode : "");
+                        break;
+                    case MediaStack.Remote:
+                        report.Media = new AgentResult(CheckState.Pass, "Optimised · media offloaded to the user's device" + seen);
+                        report.CardState = CheckState.Pass; report.CardValue = "Optimised"; report.CardSub = mode ?? "Media on the user's device";
+                        break;
+                    case MediaStack.WebRtc:
+                        report.Media = new AgentResult(CheckState.Warn, "Optimised with the legacy WebRTC path, not SlimCore" + seen +
+                                                       " · update Windows App on the user's device so SlimCore can load");
+                        report.CardState = CheckState.Warn; report.CardValue = "Fallback"; report.CardSub = "WebRTC (legacy)" + (mode != null ? " · " + mode : "");
+                        break;
+                    case MediaStack.Local:
+                        report.Media = new AgentResult(CheckState.Fail, "Not optimised · Teams is processing media inside the VM" + seen);
+                        report.CardState = CheckState.Fail; report.CardValue = "Not optimised"; report.CardSub = "Media running in the VM";
+                        break;
+                    default:
+                        report.Media = new AgentResult(CheckState.Warn, (log != null && log.Mode != null
+                            ? "Unrecognised Teams VDI mode (" + log.Mode + ") · add it to teams.slimCoreModes or teams.webRtcModes in endpoints.json"
+                            : "Could not confirm from the Teams logs") + " · in Teams, Settings > About should show \"AVD SlimCore Media Optimized\"");
+                        report.CardState = CheckState.Warn; report.CardValue = "Unconfirmed"; report.CardSub = mode ?? "Check Teams > Settings > About";
+                        break;
+                }
             }
             return report;
+        }
+
+        private enum MediaStack { Unknown, SlimCore, WebRtc, Remote, Local }
+
+        /// <summary>
+        /// Teams logs the mode as a word ("slimcore", "webrtc") or a number. The numbers are not
+        /// documented; observed values fit "second digit = media stack": x2xx = SlimCore (5200 on AVD,
+        /// confirmed against Teams > About; 7200 on WorkSpaces), x1xx = legacy WebRTC (3100).
+        /// Exact codes in endpoints.json (teams.slimCoreModes / teams.webRtcModes) take priority.
+        /// </summary>
+        private static MediaStack Classify(TeamsLogState log, TeamsConfig config)
+        {
+            if (log == null) return MediaStack.Unknown;
+            if (string.Equals(log.Stack, "local", StringComparison.OrdinalIgnoreCase)) return MediaStack.Local;
+
+            string mode = (log.Mode ?? "").Trim();
+            if (mode.Length > 0)
+            {
+                if (config != null && config.SlimCoreModes != null && config.SlimCoreModes.Any(m => string.Equals(m, mode, StringComparison.OrdinalIgnoreCase))) return MediaStack.SlimCore;
+                if (config != null && config.WebRtcModes != null && config.WebRtcModes.Any(m => string.Equals(m, mode, StringComparison.OrdinalIgnoreCase))) return MediaStack.WebRtc;
+                if (mode.IndexOf("slimcore", StringComparison.OrdinalIgnoreCase) >= 0) return MediaStack.SlimCore;
+                if (mode.IndexOf("webrtc", StringComparison.OrdinalIgnoreCase) >= 0) return MediaStack.WebRtc;
+                if (Regex.IsMatch(mode, @"^\d{4}$"))
+                {
+                    if (mode[1] == '2') return MediaStack.SlimCore;
+                    if (mode[1] == '1') return MediaStack.WebRtc;
+                }
+            }
+            if (string.Equals(log.Stack, "remote", StringComparison.OrdinalIgnoreCase)) return MediaStack.Remote;
+            return MediaStack.Unknown;
         }
 
         private class TeamsLogState

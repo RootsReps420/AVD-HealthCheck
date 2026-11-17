@@ -154,6 +154,10 @@ namespace AvdHealthCheck
         private CheckState _teamsState;
         public CheckState TeamsState { get { return _teamsState; } set { Set(ref _teamsState, value); } }
 
+        // Client app line for the report (the row itself is in Checks)
+        private string _clientAppSummary;
+        public string ClientAppSummary { get { return _clientAppSummary; } set { Set(ref _clientAppSummary, value); } }
+
         private string _latValue = "–";
         public string LatValue { get { return _latValue; } set { Set(ref _latValue, value); } }
         private string _latSub = "Waiting";

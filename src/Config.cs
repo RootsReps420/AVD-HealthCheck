@@ -17,6 +17,13 @@ namespace AvdHealthCheck
         public int? SlowResponseMs { get; set; }
         public PrismaConfig Prisma { get; set; }
         public TeamsConfig Teams { get; set; }
+        public ClientAppConfig ClientApp { get; set; }
+    }
+
+    public class ClientAppConfig
+    {
+        public bool? Enabled { get; set; }
+        public List<ClientRule> Rules { get; set; }   // empty = built-in rules (ClientDetector.DefaultRules)
     }
 
     public class PrismaConfig
@@ -32,6 +39,8 @@ namespace AvdHealthCheck
     public class TeamsConfig
     {
         public bool? Enabled { get; set; }
+        public List<string> SlimCoreModes { get; set; }   // numeric VDI modes known to mean SlimCore, e.g. "5200"
+        public List<string> WebRtcModes { get; set; }     // numeric VDI modes known to mean legacy WebRTC, e.g. "3100"
     }
 
     public class EndpointGroup
@@ -144,6 +153,7 @@ namespace AvdHealthCheck
             if (config.SpeedTest == null) config.SpeedTest = new SpeedTestConfig { Enabled = false };
             if (config.Prisma == null) config.Prisma = new PrismaConfig();
             if (config.Teams == null) config.Teams = new TeamsConfig();
+            if (config.ClientApp == null) config.ClientApp = new ClientAppConfig();
             return config;
         }
     }

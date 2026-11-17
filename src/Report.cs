@@ -29,6 +29,8 @@ namespace AvdHealthCheck
             sb.AppendLine();
 
             sb.AppendLine("SUMMARY");
+            if (!string.IsNullOrEmpty(vm.ClientAppSummary))
+                sb.AppendLine("Client app: " + vm.ClientAppSummary);
             if (checks.Any(c => c.Key != null && c.Key.StartsWith("prisma.")))
                 sb.AppendLine("Prisma Access: " + vm.PrismaValue + " · " + vm.PrismaSub);
             if (checks.Any(c => c.Key != null && c.Key.StartsWith("teams.")))

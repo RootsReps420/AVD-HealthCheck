@@ -33,7 +33,7 @@ namespace AvdHealthCheck
         /// <summary>Labels in display order, so the card can show placeholders before the data arrives.</summary>
         public static readonly string[] Labels =
         {
-            "Device name", "Signed-in user", "Session", "Operating system", "Up time",
+            "Device name", "Signed-in user", "Session", "Connected from", "Operating system", "Up time",
             "Last OS update", "Restart pending", "Defender intelligence", "Serial number", "Model",
             "Azure VM", "Resource group", "VM ID", "Processor", "Memory", "Disk (C:)", "IP address"
         };
@@ -46,6 +46,7 @@ namespace AvdHealthCheck
             info.Add("Device name", Safe(DeviceName));
             info.Add("Signed-in user", Safe(() => Environment.UserDomainName + "\\" + Environment.UserName));
             info.Add("Session", Safe(SessionType));
+            info.Add("Connected from", Safe(ClientDetector.ClientDevice));
             info.Add("Operating system", Safe(OsVersion));
             info.Add("Up time", Safe(Uptime));
 

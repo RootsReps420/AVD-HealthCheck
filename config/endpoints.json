@@ -51,6 +51,20 @@
     }
   ],
 
+  "_clientAppReadme": "Which app the user connected with. Windows only records the client type centrally (Azure Monitor WVDConnections), so this matches what the RDP client reports to the VM: its install path (directory), device name (name), or build number (build). First matching rule wins; state is pass, warn or fail. If nothing matches, the row shows the raw values so a rule can be added here.",
+  "clientApp": {
+    "enabled": true,
+    "rules": [
+      { "field": "directory", "match": "Windows365", "app": "Windows App", "state": "pass" },
+      { "field": "directory", "match": "html", "app": "Web client (browser)", "state": "warn", "advice": "Degraded experience: limited redirection (no local drives or USB devices, PDF-only printing) and no Teams media optimisation. Use Windows App." },
+      { "field": "directory", "match": "web", "app": "Web client (browser)", "state": "warn", "advice": "Degraded experience: limited redirection (no local drives or USB devices, PDF-only printing) and no Teams media optimisation. Use Windows App." },
+      { "field": "directory", "match": "Microsoft.RemoteDesktop", "app": "Remote Desktop Store app (legacy)", "state": "warn", "advice": "Old and outdated client, replaced by Windows App. Move the user to Windows App." },
+      { "field": "directory", "match": "Remote Desktop", "app": "Remote Desktop app (legacy)", "state": "warn", "advice": "Old and outdated client, replaced by Windows App. Move the user to Windows App." },
+      { "field": "directory", "match": "msrdc", "app": "Remote Desktop app (legacy)", "state": "warn", "advice": "Old and outdated client, replaced by Windows App. Move the user to Windows App." },
+      { "field": "directory", "match": "mstscax", "app": "Remote Desktop Connection (mstsc)", "state": "warn", "advice": "Not the supported way into AVD. Move the user to Windows App." }
+    ]
+  },
+
   "_prismaReadme": "Prisma Access Agent: the service is found by its executable (serviceExe); the tunnel is a network adapter whose name or description contains one of adapterMatch, is up, and has an IPv4 address.",
   "prisma": {
     "enabled": true,
@@ -60,7 +74,10 @@
 
   "_teamsReadme": "Teams media optimisation: IsWVDEnvironment registry flag, new Teams running in this session, WebRTC Redirector fallback, and the VDI mode Teams writes to its own logs (slimcore = optimised).",
   "teams": {
-    "enabled": true
+    "enabled": true,
+    "_modesReadme": "Teams logs its VDI mode as a word or an undocumented number. Built-in rule: second digit 2 = SlimCore, 1 = legacy WebRTC. List exact codes here to override; 5200 was confirmed as SlimCore on AVD against Teams > Settings > About.",
+    "slimCoreModes": [ "5200" ],
+    "webRtcModes": [ "3100" ]
   },
 
   "_speedTestReadme": "Providers are tried in order; a later one only runs the parts (latency, download, upload) an earlier one could not do. Cloudflare rate-limits by data volume per public IP, and behind the proxy every VM shares that IP, so LibreSpeed (open-source, public servers) is the automatic fallback. A bank-hosted LibreSpeed server can be added as another librespeed provider with fallbackServers, or any fixed URLs as a fixed provider.",

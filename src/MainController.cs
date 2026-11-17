@@ -69,6 +69,8 @@ namespace AvdHealthCheck
             _config = ConfigLoader.Load(out _configSource);
 
             // Local agent checks first: these are the usual suspects in an AVD incident.
+            if (_config.ClientApp.Enabled ?? true)
+                AddAgent("client.app", ConnectionGroup, "Client app", "how the user connected");
             if (_config.Prisma.Enabled ?? true)
             {
                 string exe = string.IsNullOrWhiteSpace(_config.Prisma.ServiceExe) ? "PASrv.exe" : _config.Prisma.ServiceExe;
@@ -109,6 +111,7 @@ namespace AvdHealthCheck
             foreach (string label in SystemInfoCollector.Labels) _vm.Device.Add(new DeviceField(label));
         }
 
+        private const string ConnectionGroup = "Connection";
         private const string PrismaGroup = "Prisma Access";
         private const string TeamsGroup = "Teams optimisation";
 
@@ -169,6 +172,25 @@ namespace AvdHealthCheck
             _vm.PrismaSub = report.CardSub;
         }
 
+        private async Task RunClientAppAsync()
+        {
+            CheckItem row = Agent("client.app");
+            if (row == null) return;
+            row.State = CheckState.Running;
+            row.Detail = "Checking";
+            ClientReport report;
+            try
+            {
+                report = await Task.Run(() => ClientDetector.Detect(_config.ClientApp.Rules));
+            }
+            catch (Exception ex)
+            {
+                report = new ClientReport { App = "Unknown", Summary = "could not check", Row = new AgentResult(CheckState.Warn, "Could not check: " + ex.Message) };
+            }
+            Apply(row, report.Row);
+            _vm.ClientAppSummary = report.Summary;
+        }
+
         private async Task RunTeamsAsync()
         {
             if (Agent("teams.media") == null) return;
@@ -179,7 +201,7 @@ namespace AvdHealthCheck
             TeamsReport report;
             try
             {
-                report = await Task.Run(() => AgentChecker.CheckTeams());
+                report = await Task.Run(() => AgentChecker.CheckTeams(_config.Teams));
             }
             catch (Exception ex)
             {
@@ -209,7 +231,7 @@ namespace AvdHealthCheck
             ResetView();
 
             bool speedEnabled = _config.SpeedTest.Enabled ?? true;
-            int totalUnits = _vm.Checks.Count(c => c.IsEndpoint) + 3 + (speedEnabled ? 3 : 0);
+            int totalUnits = _vm.Checks.Count(c => c.IsEndpoint) + 4 + (speedEnabled ? 3 : 0);
             int doneUnits = 0;
             Action step = () => { doneUnits++; _vm.Progress = Math.Min(99, 100.0 * doneUnits / totalUnits); };
 
@@ -217,6 +239,7 @@ namespace AvdHealthCheck
             Task device = CollectDeviceAsync().ContinueWith(t => step(), ui);
             Task prisma = RunPrismaAsync().ContinueWith(t => step(), ui);
             Task teams = RunTeamsAsync().ContinueWith(t => step(), ui);
+            Task client = RunClientAppAsync().ContinueWith(t => step(), ui);
             using (var checker = new EndpointChecker(_config.PublicIssuers, _config.SlowResponseMs ?? 1500))
             {
                 var gate = new SemaphoreSlim(Parallelism);
@@ -231,7 +254,7 @@ namespace AvdHealthCheck
 
                 await Task.WhenAll(checks);
             }
-            await Task.WhenAll(device, prisma, teams);
+            await Task.WhenAll(device, prisma, teams, client);
             UpdateConnectivitySummary(true);
 
             if (speedEnabled) await RunSpeedTestAsync(step);
@@ -258,6 +281,7 @@ namespace AvdHealthCheck
         private void ResetView()
         {
             _issuesToggle.IsChecked = false;
+            _vm.ClientAppSummary = null;
             _vm.HasIssues = false;
             foreach (CheckItem item in _vm.Checks) item.Reset();
             foreach (DeviceField field in _vm.Device) field.Value = "…";
