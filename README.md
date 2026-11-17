@@ -39,13 +39,13 @@ The card shows **Optimised**, **Fallback**, **Not optimised**, **Unconfirmed**, 
 
 ### Connectivity
 
-25 endpoints in five groups: **Identity**, **Azure Virtual Desktop service**, **Azure platform**, **Windows App**, and **Microsoft 365**. The list is in [config/endpoints.json](config/endpoints.json).
+22 endpoints in five groups: **Identity**, **Azure Virtual Desktop service**, **Azure platform**, **Windows App**, and **Microsoft 365**. The list is in [config/endpoints.json](config/endpoints.json).
 
 | Type | How it is tested | Pass means |
 | --- | --- | --- |
 | `https` / `http` | A real request through the **system proxy** (PAC/WPAD), using the signed-in user's credentials, the same way the user's apps connect. | The service answered with any HTTP status. A 404 from the broker still proves the path works. |
 | `tcp` | A direct TCP connect. This cannot go through a web proxy. | The port opened. |
-| `imds` | Azure Instance Metadata Service at `169.254.169.254`. Always direct. | The VM is in Azure and can read its own metadata. |
+| `imds` | Azure Instance Metadata Service at `169.254.169.254`. Always direct. Not in the default list; the **This device** card still reads it quietly for the VM size, region, and VM ID. | The VM is in Azure and can read its own metadata. |
 
 Results are marked **pass**, **warning**, or **fail**:
 

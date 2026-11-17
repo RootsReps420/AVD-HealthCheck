@@ -26,9 +26,6 @@
     {
       "name": "Azure platform",
       "endpoints": [
-        { "name": "Instance Metadata Service", "host": "169.254.169.254", "port": 80, "type": "imds" },
-        { "name": "Host health (wire server)", "host": "168.63.129.16", "port": 80, "type": "tcp" },
-        { "name": "Windows activation (KMS)", "host": "azkms.core.windows.net", "port": 1688, "type": "tcp" },
         { "name": "Certificate revocation (OCSP)", "host": "oneocsp.microsoft.com", "port": 80, "type": "http" },
         { "name": "Network connectivity probe", "host": "www.msftconnecttest.com", "port": 80, "type": "http", "path": "/connecttest.txt", "required": false }
       ]
