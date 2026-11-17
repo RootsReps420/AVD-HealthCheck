@@ -290,9 +290,70 @@
       </Setter>
     </Style>
 
-    <!-- One endpoint row -->
+    <!-- Collapsible section heading: chevron, name, status dot, summary. DataContext is a CheckGroup. -->
+    <Style x:Key="SectionHeader" TargetType="ToggleButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="True"/>
+      <Setter Property="ToolTip" Value="Show or hide this section"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="8,9" Margin="0,6,0,0">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="22"/>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Path x:Name="Chevron" Data="M4,2 L8,6 L4,10" Stroke="#8A8A8A" StrokeThickness="1.8" StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round" StrokeLineJoin="Round" Width="12" Height="12" VerticalAlignment="Center"
+                      RenderTransformOrigin="0.5,0.5">
+                  <Path.RenderTransform><RotateTransform Angle="0"/></Path.RenderTransform>
+                </Path>
+                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                <Rectangle Grid.Column="2" Height="1" Fill="{StaticResource LineSoft}" VerticalAlignment="Center" Margin="14,0,14,0"/>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Ellipse x:Name="Dot" Width="8" Height="8" Fill="#3DBE8A" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="Summary" Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold" Foreground="#9EE0C4" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Chevron" Property="RenderTransform">
+                  <Setter.Value><RotateTransform Angle="90"/></Setter.Value>
+                </Setter>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#141414"/>
+                <Setter TargetName="Chevron" Property="Stroke" Value="#F5F5F5"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#141414"/>
+              </Trigger>
+              <DataTrigger Binding="{Binding State}" Value="Warn">
+                <Setter TargetName="Dot" Property="Fill" Value="#E6C27A"/>
+                <Setter TargetName="Summary" Property="Foreground" Value="#E6C27A"/>
+              </DataTrigger>
+              <DataTrigger Binding="{Binding State}" Value="Fail">
+                <Setter TargetName="Dot" Property="Fill" Value="#F0857C"/>
+                <Setter TargetName="Summary" Property="Foreground" Value="#F0B4AE"/>
+              </DataTrigger>
+              <DataTrigger Binding="{Binding State}" Value="Running">
+                <Setter TargetName="Dot" Property="Fill" Value="#3A3A3A"/>
+                <Setter TargetName="Summary" Property="Foreground" Value="#8A8A8A"/>
+              </DataTrigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- One check row -->
     <DataTemplate x:Key="CheckRow">
-      <Border Padding="6,10,6,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+      <Border Padding="8,10,6,10" Margin="22,0,0,0" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1"
+              Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="32"/>
@@ -573,10 +634,9 @@
               <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <StackPanel Margin="0,0,12,10">
-              <TextBlock Text="This device" Style="{StaticResource SectionTitle}"/>
-              <TextBlock Text="Read locally on this machine" FontSize="12" Foreground="{StaticResource Subtle}" Margin="0,2,0,0"/>
-            </StackPanel>
+            <Grid Margin="0,0,12,8" Height="40">
+              <TextBlock Text="This device" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
+            </Grid>
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
               <ItemsControl ItemsSource="{Binding Device}" Margin="0,0,12,0" Focusable="False">
                 <ItemsControl.ItemTemplate>
@@ -604,32 +664,24 @@
               <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Grid Margin="0,0,12,4">
-              <StackPanel Margin="0,0,200,0">
-                <TextBlock Text="Checks" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Client app, Prisma and Teams first, then each endpoint through the system proxy" FontSize="12" Foreground="{StaticResource Subtle}"
-                           Margin="0,2,0,0" TextWrapping="Wrap"/>
-              </StackPanel>
+            <Grid Margin="0,0,12,8" Height="40">
+              <TextBlock Text="Checks" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
               <ToggleButton x:Name="IssuesToggle" Style="{StaticResource PillToggle}" Content="{Binding IssuesLabel}"
-                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
                             Visibility="{Binding HasIssues, Converter={StaticResource BoolToVis}}"
-                            ToolTip="Hide the endpoints that passed"/>
+                            ToolTip="Hide the checks that passed"/>
             </Grid>
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-              <ItemsControl ItemsSource="{Binding ChecksView}" ItemTemplate="{StaticResource CheckRow}" Margin="0,0,12,0" Focusable="False">
-                <ItemsControl.GroupStyle>
-                  <GroupStyle>
-                    <GroupStyle.HeaderTemplate>
-                      <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Margin="6,16,0,4">
-                          <Rectangle Width="14" Height="2" RadiusX="1" RadiusY="1" Fill="#3DBE8A" VerticalAlignment="Center" Margin="0,0,9,0"/>
-                          <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Bold" Foreground="#3DBE8A"/>
-                          <TextBlock Text="{Binding ItemCount}" FontSize="12" Foreground="#5C5C5C" Margin="8,0,0,0"/>
-                        </StackPanel>
-                      </DataTemplate>
-                    </GroupStyle.HeaderTemplate>
-                  </GroupStyle>
-                </ItemsControl.GroupStyle>
+              <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,12,0" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel Margin="0,0,0,4" Visibility="{Binding HasVisible, Converter={StaticResource BoolToVis}}">
+                      <ToggleButton Style="{StaticResource SectionHeader}" IsChecked="{Binding IsExpanded, Mode=TwoWay}"/>
+                      <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CheckRow}" Focusable="False"
+                                    Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
               </ItemsControl>
             </ScrollViewer>
           </Grid>

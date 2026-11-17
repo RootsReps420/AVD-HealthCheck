@@ -58,9 +58,8 @@ namespace AvdHealthCheck
             {
                 report.Version = FileVersion(service.ExePath);
                 running = service.State == "Running";
-                string about = "Service " + service.Name + " · " + service.State.ToLowerInvariant() +
-                               " · start " + service.StartMode.ToLowerInvariant() +
-                               (report.Version != null ? " · v" + report.Version : "");
+                string about = service.State + Ver(report.Version) + " · service " + service.Name +
+                               " (" + service.StartMode.ToLowerInvariant() + " start)";
                 report.Service = new AgentResult(running ? CheckState.Pass : CheckState.Fail, about);
             }
             else
@@ -70,12 +69,11 @@ namespace AvdHealthCheck
                 {
                     running = true;
                     report.Version = Safe(() => FileVersion(process.MainModule.FileName));
-                    report.Service = new AgentResult(CheckState.Pass, exe + " is running (no service registration found)" +
-                                                     (report.Version != null ? " · v" + report.Version : ""));
+                    report.Service = new AgentResult(CheckState.Pass, "Running" + Ver(report.Version) + " · " + exe + " (no service registered)");
                 }
                 else
                 {
-                    report.Service = new AgentResult(CheckState.Fail, "Not installed: no service or process for " + exe);
+                    report.Service = new AgentResult(CheckState.Fail, "Not installed · no " + exe + " service or process");
                 }
             }
 
@@ -119,19 +117,19 @@ namespace AvdHealthCheck
                                               n.NetworkInterfaceType == NetworkInterfaceType.Tunnel ||
                                               n.NetworkInterfaceType == NetworkInterfaceType.Ppp))
                                  .Select(n => n.Description).Distinct().Take(4).ToList();
-                return new AgentResult(CheckState.Fail, "No tunnel adapter matching " + string.Join(" / ", patterns) +
+                return new AgentResult(CheckState.Fail, "No tunnel · no adapter named " + string.Join(" / ", patterns) +
                     (others.Count > 0 ? " · adapters present: " + string.Join("; ", others) : ""));
             }
 
             NetworkInterface up = matches.FirstOrDefault(n => n.OperationalStatus == OperationalStatus.Up);
             if (up == null)
-                return new AgentResult(CheckState.Fail, "Tunnel adapter is " + matches[0].OperationalStatus.ToString().ToLowerInvariant() + " (disconnected) · " + matches[0].Description);
+                return new AgentResult(CheckState.Fail, "Disconnected · " + matches[0].Description + " is " + matches[0].OperationalStatus.ToString().ToLowerInvariant());
 
             string ip = up.GetIPProperties().UnicastAddresses
                           .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
                           .Select(a => a.Address.ToString()).FirstOrDefault();
             if (ip == null)
-                return new AgentResult(CheckState.Warn, "Tunnel adapter is up but has no IPv4 address · " + up.Description);
+                return new AgentResult(CheckState.Warn, "Up, no IPv4 address · " + up.Description);
 
             return new AgentResult(CheckState.Pass, "Connected · " + up.Description + " · " + ip);
         }
@@ -156,10 +154,10 @@ namespace AvdHealthCheck
                 if (key != null) flag = key.GetValue("IsWVDEnvironment");
             bool flagOn = flag is int && (int)flag == 1;
             report.Registry = flagOn
-                ? new AgentResult(CheckState.Pass, "HKLM\\SOFTWARE\\Microsoft\\Teams\\IsWVDEnvironment = 1")
+                ? new AgentResult(CheckState.Pass, "Set (IsWVDEnvironment = 1)")
                 : new AgentResult(CheckState.Fail, flag == null
-                    ? "IsWVDEnvironment is missing under HKLM\\SOFTWARE\\Microsoft\\Teams, so Teams will not optimise"
-                    : "IsWVDEnvironment is " + flag + " (needs DWORD 1)");
+                    ? "Missing · Teams will not optimise without it"
+                    : "Wrong value · IsWVDEnvironment is " + flag + ", needs DWORD 1");
 
             // 2. New Teams in this user's session (multi-session hosts run one copy per user).
             int session = Process.GetCurrentProcess().SessionId;
@@ -177,26 +175,26 @@ namespace AvdHealthCheck
                     return m.Success ? m.Groups[1].Value : FileVersion(path);
                 });
                 teamsStarted = teams.Select(p => Safe(() => (DateTime?)p.StartTime)).Where(t => t.HasValue).Min();
-                report.Client = new AgentResult(CheckState.Pass, "New Teams running" + Ver(teamsVersion));
+                report.Client = new AgentResult(CheckState.Pass, "Running" + Ver(teamsVersion));
             }
             else if (installed)
             {
-                report.Client = new AgentResult(CheckState.Warn, "Installed but not running · open Teams and run again to confirm optimisation");
+                report.Client = new AgentResult(CheckState.Warn, "Installed, not running · open Teams, then run again");
             }
             else
             {
-                report.Client = new AgentResult(CheckState.Fail, "New Teams is not installed for this user");
+                report.Client = new AgentResult(CheckState.Fail, "Not installed for this user");
             }
 
             // 3. WebRTC Redirector: Microsoft's fallback path when SlimCore is unavailable on the user's device.
             ServiceInfo webRtc = ServiceInfo.FindByExecutable("MsRdcWebRTCSvc.exe");
             if (webRtc == null)
-                report.WebRtc = new AgentResult(CheckState.Warn, "Remote Desktop WebRTC Redirector not installed (Microsoft recommends it as the fallback)");
+                report.WebRtc = new AgentResult(CheckState.Warn, "Not installed · Microsoft recommends it as the fallback when SlimCore is unavailable");
             else
             {
                 string version = FileVersion(webRtc.ExePath);
                 report.WebRtc = new AgentResult(webRtc.State == "Running" ? CheckState.Pass : CheckState.Warn,
-                    "Service " + webRtc.Name + " · " + webRtc.State.ToLowerInvariant() + Ver(version));
+                    webRtc.State + Ver(version) + " · service " + webRtc.Name);
             }
 
             // 4. What Teams itself reports: "VDI Mode: slimcore" / "currentStack=remote" in its logs.
@@ -208,12 +206,12 @@ namespace AvdHealthCheck
             // Verdict
             if (!remote)
             {
-                report.Media = new AgentResult(CheckState.Warn, "Not an AVD/RDP session · optimisation only applies inside a remote session");
+                report.Media = new AgentResult(CheckState.Warn, "N/A · not a remote session");
                 report.CardState = CheckState.Warn; report.CardValue = "N/A"; report.CardSub = "Not a remote session";
             }
             else if (!flagOn)
             {
-                report.Media = new AgentResult(CheckState.Fail, "Not optimised · IsWVDEnvironment registry flag missing on this host");
+                report.Media = new AgentResult(CheckState.Fail, "Not optimised · VDI registry flag is missing on this VM");
                 report.CardState = CheckState.Fail; report.CardValue = "Not optimised"; report.CardSub = "VDI registry flag missing";
             }
             else if (teams.Count == 0)
@@ -231,20 +229,20 @@ namespace AvdHealthCheck
                 switch (stack)
                 {
                     case MediaStack.SlimCore:
-                        report.Media = new AgentResult(CheckState.Pass, "Optimised · SlimCore, media offloaded to the user's device" + seen);
+                        report.Media = new AgentResult(CheckState.Pass, "Optimised · SlimCore, media runs on the user's device" + seen);
                         report.CardState = CheckState.Pass; report.CardValue = "Optimised"; report.CardSub = "SlimCore" + (mode != null ? " · " + mode : "");
                         break;
                     case MediaStack.Remote:
-                        report.Media = new AgentResult(CheckState.Pass, "Optimised · media offloaded to the user's device" + seen);
+                        report.Media = new AgentResult(CheckState.Pass, "Optimised · media runs on the user's device" + seen);
                         report.CardState = CheckState.Pass; report.CardValue = "Optimised"; report.CardSub = mode ?? "Media on the user's device";
                         break;
                     case MediaStack.WebRtc:
-                        report.Media = new AgentResult(CheckState.Warn, "Optimised with the legacy WebRTC path, not SlimCore" + seen +
+                        report.Media = new AgentResult(CheckState.Warn, "Fallback · legacy WebRTC, not SlimCore" + seen +
                                                        " · update Windows App on the user's device so SlimCore can load");
                         report.CardState = CheckState.Warn; report.CardValue = "Fallback"; report.CardSub = "WebRTC (legacy)" + (mode != null ? " · " + mode : "");
                         break;
                     case MediaStack.Local:
-                        report.Media = new AgentResult(CheckState.Fail, "Not optimised · Teams is processing media inside the VM" + seen);
+                        report.Media = new AgentResult(CheckState.Fail, "Not optimised · media is running inside the VM" + seen);
                         report.CardState = CheckState.Fail; report.CardValue = "Not optimised"; report.CardSub = "Media running in the VM";
                         break;
                     default:

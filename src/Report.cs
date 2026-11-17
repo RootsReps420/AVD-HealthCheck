@@ -9,7 +9,7 @@ namespace AvdHealthCheck
     public static class AppInfo
     {
         public const string Name = "AVD Health Check";
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
     }
 
     public static class Report
@@ -42,7 +42,7 @@ namespace AvdHealthCheck
             if (problems.Count > 0)
             {
                 sb.AppendLine("ISSUES");
-                foreach (CheckItem c in problems) sb.AppendLine(Line(c));
+                foreach (CheckItem c in problems) sb.AppendLine(Line(c, true));
                 sb.AppendLine();
             }
 
@@ -54,7 +54,7 @@ namespace AvdHealthCheck
             foreach (IGrouping<string, CheckItem> group in checks.GroupBy(c => c.Group))
             {
                 sb.AppendLine(group.Key);
-                foreach (CheckItem c in group) sb.AppendLine("  " + Line(c));
+                foreach (CheckItem c in group) sb.AppendLine("  " + Line(c, false));
             }
             sb.AppendLine();
             sb.AppendLine(AppInfo.Name + " v" + AppInfo.Version + " · endpoints from " + configSource);
@@ -94,11 +94,12 @@ namespace AvdHealthCheck
             return parts.Count == 0 ? "" : " (" + string.Join(", ", parts) + ")";
         }
 
-        private static string Line(CheckItem c)
+        private static string Line(CheckItem c, bool withSection)
         {
             string tag = c.State == CheckState.Pass ? "[PASS]" : c.State == CheckState.Warn ? "[WARN]" : c.State == CheckState.Fail ? "[FAIL]" : "[ -- ]";
             string latency = string.IsNullOrEmpty(c.Latency) ? "" : " · " + c.Latency;
-            return tag + " " + c.Name + " (" + c.Target + ")" + latency + " · " + c.Detail;
+            string name = (withSection ? c.Group + " · " : "") + c.Name;
+            return tag + " " + name + " (" + c.Target + ")" + latency + " · " + c.Detail;
         }
     }
 }

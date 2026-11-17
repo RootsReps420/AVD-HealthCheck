@@ -54,6 +54,15 @@ namespace AvdHealthCheck
             return parts.Count == 0 ? "the client reported no details" : string.Join(" · ", parts);
         }
 
+        /// <summary>Build and device only, for a client that was recognised.</summary>
+        public string Short()
+        {
+            var parts = new List<string>();
+            if (Build > 0) parts.Add("build " + Build);
+            if (!string.IsNullOrEmpty(Name)) parts.Add("from " + Name);
+            return string.Join(" · ", parts);
+        }
+
         // ---------------------------------------------------------------- WTS interop
 
         [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -157,7 +166,9 @@ namespace AvdHealthCheck
 
             report.App = rule.App;
             CheckState state = rule.Kind;
-            string detail = rule.App + (string.IsNullOrEmpty(rule.Advice) ? "" : " · " + rule.Advice) + " · " + session.Raw();
+            string extra = session.Short();
+            string detail = rule.App + (string.IsNullOrEmpty(extra) ? "" : " · " + extra) +
+                            (string.IsNullOrEmpty(rule.Advice) ? "" : " · " + rule.Advice);
             report.Row = new AgentResult(state, detail);
             report.Summary = rule.App + (session.Build > 0 ? " (build " + session.Build + ")" : "") +
                              (state == CheckState.Pass ? "" : " · " + (rule.Advice ?? "not the recommended client"));

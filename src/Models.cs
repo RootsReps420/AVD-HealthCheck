@@ -1,7 +1,9 @@
 // View models bound by the XAML. Written for the in-box C# 5 compiler, so no
 // string interpolation, null-conditional operators or expression-bodied members.
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -39,11 +41,21 @@ namespace AvdHealthCheck
         public string Target { get; set; }
         public bool Required { get; set; }
 
+        public CheckGroup Owner { get; set; }
+
         private CheckState _state;
         public CheckState State
         {
             get { return _state; }
-            set { Set(ref _state, value); }
+            set { if (Set(ref _state, value) && Owner != null) Owner.Refresh(); }
+        }
+
+        // False when "Show issues only" hides a passing check.
+        private bool _isVisible = true;
+        public bool IsVisible
+        {
+            get { return _isVisible; }
+            set { if (Set(ref _isVisible, value) && Owner != null) Owner.Refresh(); }
         }
 
         private string _detail;
@@ -68,6 +80,69 @@ namespace AvdHealthCheck
         }
     }
 
+    /// <summary>A collapsible section of the Checks list (Connection, Prisma Access, Identity, ...).</summary>
+    public class CheckGroup : Observable
+    {
+        public CheckGroup(string name)
+        {
+            Name = name;
+            Items = new ObservableCollection<CheckItem>();
+            _isExpanded = true;
+        }
+
+        public string Name { get; private set; }
+        public ObservableCollection<CheckItem> Items { get; private set; }
+
+        private bool _isExpanded;
+        public bool IsExpanded { get { return _isExpanded; } set { Set(ref _isExpanded, value); } }
+
+        public void Add(CheckItem item)
+        {
+            item.Owner = this;
+            Items.Add(item);
+        }
+
+        /// <summary>Worst state in the section; drives the dot and summary colour.</summary>
+        public CheckState State
+        {
+            get
+            {
+                if (Items.Any(i => i.State == CheckState.Fail)) return CheckState.Fail;
+                if (Items.Any(i => i.State == CheckState.Warn)) return CheckState.Warn;
+                if (Items.Any(i => i.State == CheckState.Running || i.State == CheckState.Pending)) return CheckState.Running;
+                return CheckState.Pass;
+            }
+        }
+
+        /// <summary>"3 of 3 OK", "1 failed · 1 warning", or "2 of 5 checked" while running.</summary>
+        public string Summary
+        {
+            get
+            {
+                int total = Items.Count;
+                int fail = Items.Count(i => i.State == CheckState.Fail);
+                int warn = Items.Count(i => i.State == CheckState.Warn);
+                int pass = Items.Count(i => i.State == CheckState.Pass);
+                if (pass + fail + warn < total) return (pass + fail + warn) + " of " + total + " checked";
+                if (fail == 0 && warn == 0) return total == 1 ? "OK" : "All " + total + " OK";
+                var parts = new List<string>();
+                if (fail > 0) parts.Add(fail + " failed");
+                if (warn > 0) parts.Add(warn + (warn == 1 ? " warning" : " warnings"));
+                return string.Join(" · ", parts);
+            }
+        }
+
+        public bool HasVisible { get { return Items.Any(i => i.IsVisible); } }
+        public bool HasIssues { get { return Items.Any(i => i.State == CheckState.Fail || i.State == CheckState.Warn); } }
+
+        public void Refresh()
+        {
+            Raise("State");
+            Raise("Summary");
+            Raise("HasVisible");
+        }
+    }
+
     /// <summary>One label/value row in the This device card.</summary>
     public class DeviceField : Observable
     {
@@ -88,12 +163,13 @@ namespace AvdHealthCheck
         public MainViewModel()
         {
             Checks = new ObservableCollection<CheckItem>();
+            Groups = new ObservableCollection<CheckGroup>();
             Device = new ObservableCollection<DeviceField>();
             CopyLabel = "Copy report";
         }
 
-        public ObservableCollection<CheckItem> Checks { get; private set; }
-        public ICollectionView ChecksView { get; set; }
+        public ObservableCollection<CheckItem> Checks { get; private set; }     // every check, flat (counts and report)
+        public ObservableCollection<CheckGroup> Groups { get; private set; }    // the same checks, by section (the list)
         public ObservableCollection<DeviceField> Device { get; private set; }
 
         private bool _isRunning;

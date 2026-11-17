@@ -107,7 +107,7 @@ Third-party speed test sites are not embedded: their results cannot be read into
 ## Using it
 
 1. Copy `AVDHealthCheck.exe` to the VM and double-click it. Checks start straight away and take about 15–30 seconds.
-2. Read the summary cards and the **Connectivity** list. If anything failed, **Show issues only** hides the passes.
+2. Read the summary cards, then the **Checks** list. It has a section for each area (Connection, Prisma Access, Teams optimisation, then the endpoint groups). When the run finishes, sections where everything passed fold away to a single line ("All 8 OK"), and sections with a problem stay open. Click any heading to open or close it. **Show issues only** hides every check that passed.
 3. Select **Copy report** (or press Ctrl+C) and paste it into the incident. The report lists problems first, then device facts and every endpoint.
 4. Select **Run again** (or press F5) after a fix.
 

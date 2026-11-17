@@ -70,20 +70,20 @@ namespace AvdHealthCheck
 
             // Local agent checks first: these are the usual suspects in an AVD incident.
             if (_config.ClientApp.Enabled ?? true)
-                AddAgent("client.app", ConnectionGroup, "Client app", "how the user connected");
+                AddAgent("client.app", ConnectionGroup, "Client app", "RDP client in use");
             if (_config.Prisma.Enabled ?? true)
             {
                 string exe = string.IsNullOrWhiteSpace(_config.Prisma.ServiceExe) ? "PASrv.exe" : _config.Prisma.ServiceExe;
                 List<string> adapters = _config.Prisma.AdapterMatch ?? PrismaConfig.DefaultAdapterMatch;
-                AddAgent("prisma.service", PrismaGroup, "Prisma Access Agent", exe + " · service");
-                AddAgent("prisma.tunnel", PrismaGroup, "Prisma tunnel", adapters.FirstOrDefault() ?? "tunnel adapter");
+                AddAgent("prisma.service", PrismaGroup, "Agent service", exe);
+                AddAgent("prisma.tunnel", PrismaGroup, "Tunnel", adapters.FirstOrDefault() ?? "tunnel adapter");
             }
             if (_config.Teams.Enabled ?? true)
             {
-                AddAgent("teams.media", TeamsGroup, "Media optimisation", "VDI mode reported by Teams");
-                AddAgent("teams.client", TeamsGroup, "New Teams", "ms-teams.exe · this session");
-                AddAgent("teams.registry", TeamsGroup, "VDI registry flag", "IsWVDEnvironment");
-                AddAgent("teams.webrtc", TeamsGroup, "WebRTC Redirector (fallback)", "MsRdcWebRTCSvc.exe · service");
+                AddAgent("teams.media", TeamsGroup, "Media optimisation", "VDI mode in the Teams logs");
+                AddAgent("teams.client", TeamsGroup, "New Teams", "ms-teams.exe in this session");
+                AddAgent("teams.registry", TeamsGroup, "VDI registry flag", "IsWVDEnvironment (HKLM)");
+                AddAgent("teams.webrtc", TeamsGroup, "WebRTC Redirector (fallback)", "MsRdcWebRTCSvc.exe");
             }
 
             foreach (EndpointGroup group in _config.Groups)
@@ -101,12 +101,9 @@ namespace AvdHealthCheck
                     };
                     item.Reset();
                     _vm.Checks.Add(item);
+                    Section(group.Name).Add(item);
                 }
             }
-
-            ICollectionView view = CollectionViewSource.GetDefaultView(_vm.Checks);
-            view.GroupDescriptions.Add(new PropertyGroupDescription("Group"));
-            _vm.ChecksView = view;
 
             foreach (string label in SystemInfoCollector.Labels) _vm.Device.Add(new DeviceField(label));
         }
@@ -120,6 +117,18 @@ namespace AvdHealthCheck
             var item = new CheckItem { Key = key, Group = group, Name = name, Target = target, Required = true };
             item.Reset();
             _vm.Checks.Add(item);
+            Section(group).Add(item);
+        }
+
+        private CheckGroup Section(string name)
+        {
+            CheckGroup section = _vm.Groups.FirstOrDefault(g => g.Name == name);
+            if (section == null)
+            {
+                section = new CheckGroup(name);
+                _vm.Groups.Add(section);
+            }
+            return section;
         }
 
         private CheckItem Agent(string key)
@@ -267,20 +276,30 @@ namespace AvdHealthCheck
             _took = clock.Elapsed;
             _vm.Progress = 100;
             SetOverall();
+            FoldPassingSections();
             _vm.Footer = "Last run " + Format.Date(_startedAt) + " · took " + (int)Math.Round(_took.TotalSeconds) + " s · endpoints from " + _configSource + " · v" + AppInfo.Version;
             _vm.IsRunning = false;
         }
 
         private void ApplyIssuesFilter(bool issuesOnly)
         {
-            _vm.ChecksView.Filter = issuesOnly
-                ? new Predicate<object>(o => ((CheckItem)o).State == CheckState.Fail || ((CheckItem)o).State == CheckState.Warn)
-                : null;
+            foreach (CheckItem item in _vm.Checks)
+                item.IsVisible = !issuesOnly || item.State == CheckState.Fail || item.State == CheckState.Warn;
+            if (issuesOnly)
+                foreach (CheckGroup section in _vm.Groups.Where(g => g.HasIssues)) section.IsExpanded = true;
+        }
+
+        /// <summary>After a run: fold away sections where everything passed, keep problems open.</summary>
+        private void FoldPassingSections()
+        {
+            foreach (CheckGroup section in _vm.Groups) section.IsExpanded = section.HasIssues;
         }
 
         private void ResetView()
         {
             _issuesToggle.IsChecked = false;
+            foreach (CheckItem item in _vm.Checks) item.IsVisible = true;
+            foreach (CheckGroup section in _vm.Groups) section.IsExpanded = true;
             _vm.ClientAppSummary = null;
             _vm.HasIssues = false;
             foreach (CheckItem item in _vm.Checks) item.Reset();
